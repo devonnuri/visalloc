@@ -7,7 +7,7 @@ function FlagCell({ label, active = false }: { label: string; active?: boolean }
   return (
     <div
       className={
-        'w-6 h-6 border rounded-md grid place-items-center text-xs font-mono ' +
+        'w-6 h-6 border grid place-items-center text-xs font-mono ' +
         (active ? ' border-emerald-600 text-emerald-700 bg-emerald-50 ' : ' border-gray-500 ')
       }
       title={label}
@@ -37,13 +37,18 @@ function ChunkCard({
   caddr,
   c,
   isTop = false,
+  onSelect,
 }: {
   caddr: number;
   c: ArenaSnapshot['chunks'][number];
   isTop?: boolean;
+  onSelect?: (ptr: number) => void;
 }) {
   return (
-    <div className="rounded-xl border border-gray-600 bg-gray-100 shadow-sm overflow-hidden flex flex-col font-mono w-56">
+    <div
+      className="border border-gray-600 bg-gray-100 shadow-sm overflow-hidden flex flex-col font-mono w-56 cursor-pointer"
+      onClick={() => onSelect && onSelect(((caddr + CHUNK_OVERHEAD) >>> 0) as number)}
+    >
       {/* Row: prev_size */}
       <div className="flex items-center justify-between px-3 py-2 text-xs">
         <span className="font-medium">prev_size</span>
@@ -82,10 +87,12 @@ function BinRow({
   items,
   snap,
   labelTopPredicate,
+  onSelect,
 }: {
   items: number[]; // chunk header addresses
   snap: ArenaSnapshot;
   labelTopPredicate?: (addr: number) => boolean;
+  onSelect?: (ptr: number) => void;
 }) {
   return (
     <div className="flex gap-4 flex-nowrap overflow-x-auto py-2">
@@ -98,6 +105,7 @@ function BinRow({
               caddr={addr}
               c={snap.chunks[addr]}
               isTop={labelTopPredicate?.(addr) ?? false}
+              onSelect={onSelect}
             />
           </div>
         ))
@@ -116,13 +124,100 @@ function Section({
   right?: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-gray-300 p-5 bg-white font-mono">
-      <div className="flex items-center justify-between mb-4">
+    <section className="border border-gray-300 p-4 bg-white font-mono">
+      <div className="flex items-center justify-between mb-2">
         <h2 className="text-gray-800 font-semibold text-sm">{title}</h2>
         {right}
       </div>
       {children}
     </section>
+  );
+}
+
+// -------------------------- Memory Bar (heap overview) --------------------------
+function maskSize(sz: number | null | undefined) {
+  if (sz == null) return 0;
+  // ptmalloc size의 하위 3비트는 flag로 사용(A,P,MMAP 등) → 정렬 마스크
+  return sz & ~0x7;
+}
+
+function orderedChunks(snap: ArenaSnapshot) {
+  const addrs = Object.keys(snap.chunks).map(n => Number(n));
+  addrs.sort((a, b) => a - b);
+  return addrs.map(addr => ({ addr, c: snap.chunks[addr] }));
+}
+
+function collectTotalSpan(snap: ArenaSnapshot) {
+  const items = orderedChunks(snap);
+  if (items.length === 0) return { start: 0, end: 0, bytes: 0 };
+  const start = items[0].addr >>> 0;
+  // 윗부분은 top chunk 크기까지 포함해서 전체 wilderness를 반영
+  const top = snap.top ?? items[items.length - 1].addr;
+  const topSize = maskSize(snap.chunks[top]?.size) + CHUNK_OVERHEAD;
+  const end = ((top >>> 0) + topSize) >>> 0;
+  return { start, end, bytes: end - start };
+}
+
+function MemoryBar({ snap }: { snap: ArenaSnapshot }) {
+  const { start, bytes } = useMemo(() => collectTotalSpan(snap), [snap]);
+  const items = useMemo(() => orderedChunks(snap), [snap]);
+
+  if (bytes <= 0 || items.length === 0) {
+    return (
+      <div className="w-full h-6 bg-gray-200 border border-gray-300 grid place-items-center text-[11px] text-gray-500">
+        (no chunks)
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full mb-2">
+      <div className="mb-1 flex items-center justify-between text-[11px] text-gray-600">
+        <span>heap layout</span>
+        <span className="flex gap-3">
+          <span className="inline-flex items-center gap-1">
+            <span className="w-3 h-3 bg-emerald-300 border border-emerald-600" /> inuse
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="w-3 h-3 bg-sky-200 border border-sky-500" /> free
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="w-3 h-3 bg-amber-200 border border-amber-600" /> top
+          </span>
+        </span>
+      </div>
+
+      <div className="w-full h-6 border border-gray-400 overflow-hidden flex">
+        {items.map(({ addr, c }) => {
+          const raw = maskSize(c.size) + CHUNK_OVERHEAD; // 헤더 포함 영역으로 시각화
+          const widthPct = Math.max((raw / bytes) * 100, 0.2); // 너무 얇은 청크 가시성 확보
+          const isTop = (snap.top ?? -1) === addr;
+          const cls =
+            'h-full shrink-0 border-r ' +
+            (isTop
+              ? ' bg-amber-200 border-amber-600'
+              : c.inuse
+                ? ' bg-emerald-300 border-emerald-600'
+                : ' bg-sky-200 border-sky-500');
+
+          const tooltip =
+            `chunk ${hex(addr)}\n` +
+            `ptr   ${hex((addr + CHUNK_OVERHEAD) >>> 0)}\n` +
+            `size  ${hex(maskSize(c.size))} (+hdr ${CHUNK_OVERHEAD})\n` +
+            `state ${isTop ? 'TOP' : c.inuse ? 'INUSE' : 'FREE'}`;
+
+          return (
+            <div key={addr} className={cls} style={{ width: `${widthPct}%` }} title={tooltip} />
+          );
+        })}
+      </div>
+
+      {/* 좌/우 끝 주소 라벨 */}
+      <div className="mt-1 flex justify-between text-[10px] text-gray-500">
+        <span>{hex(start)}</span>
+        <span>{hex((start + bytes) >>> 0)}</span>
+      </div>
+    </div>
   );
 }
 
@@ -255,14 +350,6 @@ export default function Visualizer() {
     refresh();
   }
 
-  function doFreeLast() {
-    if (!arenaRef.current || ptrs.length === 0) return;
-    const p = ptrs[ptrs.length - 1];
-    arenaRef.current.free(p as number);
-    refresh();
-    setPtrs(prev => prev.slice(0, -1));
-  }
-
   function doFreePtr() {
     if (!arenaRef.current || !freePtr) return;
     const p = parsePtr(freePtr);
@@ -275,7 +362,7 @@ export default function Visualizer() {
 
   // Helper: render allocated stack
   const allocatedCards = useMemo(() => {
-    if (!snap) return [] as JSX.Element[];
+    if (!snap) return [];
     return ptrs.slice(-6).map(p => {
       const ch = arenaRef.current?.getChunk(p as number);
       if (!ch)
@@ -283,7 +370,12 @@ export default function Visualizer() {
       const cSnap = snap.chunks[ch.addr];
       return (
         <div key={p} className="shrink-0">
-          <ChunkCard caddr={ch.addr} c={cSnap} isTop={ch.addr === topAddr} />
+          <ChunkCard
+            caddr={ch.addr}
+            c={cSnap}
+            isTop={ch.addr === topAddr}
+            onSelect={ptr => setFreePtr(hex(ptr))}
+          />
         </div>
       );
     });
@@ -292,42 +384,36 @@ export default function Visualizer() {
   return (
     <div className="w-full min-h-screen bg-neutral-50 text-gray-900 p-6 font-mono">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3 mb-2">
         <input
           placeholder="size"
           value={size}
           onChange={e => setSize(e.target.value)}
-          className="h-8 w-28 rounded-md border border-gray-400 bg-white px-2 text-sm font-mono"
+          className="h-8 w-28 border border-gray-400 bg-white px-2 text-sm font-mono"
         />
         <button
           onClick={doMalloc}
-          className="h-8 px-3 rounded-md border border-gray-600 bg-gray-200 text-sm shadow font-mono"
+          className="h-8 px-3 border border-gray-600 bg-gray-200 text-sm shadow font-mono"
         >
           malloc
-        </button>
-        <button
-          onClick={doFreeLast}
-          className="h-8 px-3 rounded-md border border-gray-600 bg-gray-200 text-sm shadow font-mono"
-        >
-          free (last)
         </button>
         <div className="flex items-center gap-2">
           <input
             placeholder="free(ptr) e.g. 0x1010"
             value={freePtr}
             onChange={e => setFreePtr(e.target.value)}
-            className="h-8 w-44 rounded-md border border-gray-400 bg-white px-2 text-sm font-mono"
+            className="h-8 w-44 border border-gray-400 bg-white px-2 text-sm font-mono"
           />
           <button
             onClick={doFreePtr}
-            className="h-8 px-3 rounded-md border border-gray-600 bg-gray-200 text-sm shadow font-mono"
+            className="h-8 px-3 border border-gray-600 bg-gray-200 text-sm shadow font-mono"
           >
             free(ptr)
           </button>
         </div>
         <button
           onClick={doConsolidate}
-          className="h-8 px-3 rounded-md border border-gray-600 bg-gray-200 text-sm shadow font-mono"
+          className="h-8 px-3 border border-gray-600 bg-gray-200 text-sm shadow font-mono"
         >
           consolidate
         </button>
@@ -337,16 +423,23 @@ export default function Visualizer() {
         </div>
       </div>
 
-      {/* Below the toolbar we split into two columns: left = chunks, right = recent events/logs */}
+      {/* Memory layout bar under toolbar */}
+      {snap && <MemoryBar snap={snap} />}
 
+      {/* Below the toolbar we split into two columns: left = chunks, right = recent events/logs */}
       {snap && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left column: chunk-related sections (span 2 on large screens) */}
-          <div className="space-y-8 lg:col-span-2">
+          <div className="space-y-4 lg:col-span-2">
             <Section title="top chunk (wilderness)">
               {topChunk ? (
                 <div className="flex gap-4 items-start">
-                  <ChunkCard caddr={topAddr as number} c={topChunk} isTop />
+                  <ChunkCard
+                    caddr={topAddr as number}
+                    c={topChunk}
+                    isTop
+                    onSelect={p => setFreePtr(hex(p))}
+                  />
                   <div className="text-xs text-gray-600 leading-5 max-w-md">
                     <div>
                       <span className="font-semibold">Address:</span> {hex(topAddr as number)}
@@ -366,7 +459,12 @@ export default function Visualizer() {
             </Section>
 
             <Section title="unsorted bin">
-              <BinRow items={unsortedItems} snap={snap} labelTopPredicate={a => a === topAddr} />
+              <BinRow
+                items={unsortedItems}
+                snap={snap}
+                labelTopPredicate={a => a === topAddr}
+                onSelect={p => setFreePtr(hex(p))}
+              />
             </Section>
 
             <Section
@@ -384,6 +482,7 @@ export default function Visualizer() {
                         items={listFastbin(i, snap)}
                         snap={snap}
                         labelTopPredicate={a => a === topAddr}
+                        onSelect={p => setFreePtr(hex(p))}
                       />
                     </div>
                   ))}
@@ -396,7 +495,7 @@ export default function Visualizer() {
               right={
                 <button
                   onClick={() => setShowAllSmall(v => !v)}
-                  className="h-7 px-2 rounded-md border border-gray-400 bg-gray-100 text-xs"
+                  className="h-7 px-2 border border-gray-400 bg-gray-100 text-xs"
                 >
                   {showAllSmall ? 'show non-empty' : 'show all (first 64)'}
                 </button>
@@ -413,6 +512,7 @@ export default function Visualizer() {
                         items={listSmallbin(i, snap)}
                         snap={snap}
                         labelTopPredicate={a => a === topAddr}
+                        onSelect={p => setFreePtr(hex(p))}
                       />
                     </div>
                   ))}
@@ -425,7 +525,7 @@ export default function Visualizer() {
               right={
                 <button
                   onClick={() => setShowAllLarge(v => !v)}
-                  className="h-7 px-2 rounded-md border border-gray-400 bg-gray-100 text-xs"
+                  className="h-7 px-2 border border-gray-400 bg-gray-100 text-xs"
                 >
                   {showAllLarge ? 'show non-empty' : 'show all (bucketed)'}
                 </button>
@@ -442,6 +542,7 @@ export default function Visualizer() {
                         items={listLargebin(i, snap)}
                         snap={snap}
                         labelTopPredicate={a => a === topAddr}
+                        onSelect={p => setFreePtr(hex(p))}
                       />
                     </div>
                   ))}
@@ -466,6 +567,7 @@ export default function Visualizer() {
                           items={snap.tcache[nb]}
                           snap={snap}
                           labelTopPredicate={a => a === topAddr}
+                          onSelect={p => setFreePtr(hex(p))}
                         />
                       </div>
                     ))}
@@ -475,7 +577,7 @@ export default function Visualizer() {
           </div>
 
           {/* Right column: allocated / recent events */}
-          <div className="space-y-8 lg:col-span-1">
+          <div className="space-y-4 lg:col-span-1">
             <Section title="allocated (stack top = next free)">
               <div className="flex gap-4 overflow-x-auto py-2">
                 {allocatedCards.length ? (

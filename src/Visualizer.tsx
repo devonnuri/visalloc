@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import type { Addr, ArenaSnapshot } from './ptmalloc2';
+import type { ArenaSnapshot } from './ptmalloc2';
 import { Arena as ArenaImpl, CHUNK_OVERHEAD } from './ptmalloc2';
 
 // -------------------------- Presentational Bits --------------------------
@@ -239,7 +239,7 @@ export default function Visualizer() {
   }
 
   function doMalloc() {
-    const n = parseInt(size || '0', 10);
+    const n = parseInt(size || '0');
     if (!Number.isFinite(n) || n <= 0 || !arenaRef.current) return;
     const p = arenaRef.current.malloc(n);
     refresh();
@@ -337,155 +337,164 @@ export default function Visualizer() {
         </div>
       </div>
 
-      <Section title="top chunk (wilderness)">
-        {topChunk ? (
-          <div className="flex gap-4 items-start">
-            <ChunkCard caddr={topAddr as number} c={topChunk} isTop />
-            <div className="text-xs text-gray-600 leading-5 max-w-md">
-              <div>
-                <span className="font-semibold">Address:</span> {hex(topAddr as number)}
-              </div>
-              <div>
-                <span className="font-semibold">Size:</span> {hex(topChunk.size as number)}
-              </div>
-              <div className="mt-1">
-                The <em>top chunk</em> (a.k.a. wilderness) is not in any bin. Allocations split from
-                its head; frees that coalesce to the top will merge here.
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="text-xs text-gray-500 italic">(no top chunk)</div>
-        )}
-      </Section>
+      {/* Below the toolbar we split into two columns: left = chunks, right = recent events/logs */}
 
       {snap && (
-        <div className="space-y-8">
-          <Section title="unsorted bin">
-            <BinRow items={unsortedItems} snap={snap} labelTopPredicate={a => a === topAddr} />
-          </Section>
-
-          <Section
-            title="fastbins"
-            right={<span className="text-xs text-gray-500">non-empty only</span>}
-          >
-            {nonEmptyFastbinIndices.length === 0 ? (
-              <div className="text-xs text-gray-500 italic">(all empty)</div>
-            ) : (
-              <div className="space-y-4">
-                {nonEmptyFastbinIndices.map(i => (
-                  <div key={i}>
-                    <div className="text-xs font-semibold text-gray-700 mb-1">fastbin[{i}]</div>
-                    <BinRow
-                      items={listFastbin(i, snap)}
-                      snap={snap}
-                      labelTopPredicate={a => a === topAddr}
-                    />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left column: chunk-related sections (span 2 on large screens) */}
+          <div className="space-y-8 lg:col-span-2">
+            <Section title="top chunk (wilderness)">
+              {topChunk ? (
+                <div className="flex gap-4 items-start">
+                  <ChunkCard caddr={topAddr as number} c={topChunk} isTop />
+                  <div className="text-xs text-gray-600 leading-5 max-w-md">
+                    <div>
+                      <span className="font-semibold">Address:</span> {hex(topAddr as number)}
+                    </div>
+                    <div>
+                      <span className="font-semibold">Size:</span> {hex(topChunk.size as number)}
+                    </div>
+                    <div className="mt-1">
+                      The <em>top chunk</em> (a.k.a. wilderness) is not in any bin. Allocations
+                      split from its head; frees that coalesce to the top will merge here.
+                    </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </Section>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 italic">(no top chunk)</div>
+              )}
+            </Section>
 
-          <Section
-            title="smallbins"
-            right={
-              <button
-                onClick={() => setShowAllSmall(v => !v)}
-                className="h-7 px-2 rounded-md border border-gray-400 bg-gray-100 text-xs"
-              >
-                {showAllSmall ? 'show non-empty' : 'show all (first 64)'}
-              </button>
-            }
-          >
-            {smallbinIndices.length === 0 ? (
-              <div className="text-xs text-gray-500 italic">(no non-empty smallbins)</div>
-            ) : (
-              <div className="grid sm:grid-cols-2 gap-4">
-                {smallbinIndices.map(i => (
-                  <div key={i}>
-                    <div className="text-xs font-semibold text-gray-700 mb-1">smallbin[{i}]</div>
-                    <BinRow
-                      items={listSmallbin(i, snap)}
-                      snap={snap}
-                      labelTopPredicate={a => a === topAddr}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </Section>
+            <Section title="unsorted bin">
+              <BinRow items={unsortedItems} snap={snap} labelTopPredicate={a => a === topAddr} />
+            </Section>
 
-          <Section
-            title="largebins"
-            right={
-              <button
-                onClick={() => setShowAllLarge(v => !v)}
-                className="h-7 px-2 rounded-md border border-gray-400 bg-gray-100 text-xs"
-              >
-                {showAllLarge ? 'show non-empty' : 'show all (bucketed)'}
-              </button>
-            }
-          >
-            {largebinIndices.length === 0 ? (
-              <div className="text-xs text-gray-500 italic">(no non-empty largebins)</div>
-            ) : (
-              <div className="grid sm:grid-cols-2 gap-4">
-                {largebinIndices.map(i => (
-                  <div key={i}>
-                    <div className="text-xs font-semibold text-gray-700 mb-1">largebin[{i}]</div>
-                    <BinRow
-                      items={listLargebin(i, snap)}
-                      snap={snap}
-                      labelTopPredicate={a => a === topAddr}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </Section>
-
-          <Section title="tcache (size → LIFO stack)">
-            {Object.keys(snap.tcache).length === 0 ? (
-              <div className="text-xs text-gray-500 italic">(tcache empty)</div>
-            ) : (
-              <div className="space-y-4">
-                {Object.keys(snap.tcache)
-                  .map(k => Number(k))
-                  .sort((a, b) => a - b)
-                  .map(nb => (
-                    <div key={nb}>
-                      <div className="text-xs font-semibold text-gray-700 mb-1">size {hex(nb)}</div>
+            <Section
+              title="fastbins"
+              right={<span className="text-xs text-gray-500">non-empty only</span>}
+            >
+              {nonEmptyFastbinIndices.length === 0 ? (
+                <div className="text-xs text-gray-500 italic">(all empty)</div>
+              ) : (
+                <div className="space-y-4">
+                  {nonEmptyFastbinIndices.map(i => (
+                    <div key={i}>
+                      <div className="text-xs font-semibold text-gray-700 mb-1">fastbin[{i}]</div>
                       <BinRow
-                        items={snap.tcache[nb]}
+                        items={listFastbin(i, snap)}
                         snap={snap}
                         labelTopPredicate={a => a === topAddr}
                       />
                     </div>
                   ))}
-              </div>
-            )}
-          </Section>
-
-          <Section title="allocated (stack top = next free)">
-            <div className="flex gap-4 overflow-x-auto py-2">
-              {allocatedCards.length ? (
-                allocatedCards
-              ) : (
-                <div className="text-gray-500 text-xs italic">(no allocations yet)</div>
-              )}
-            </div>
-          </Section>
-
-          <Section title="recent events">
-            <div className="text-xs text-gray-700 max-h-56 overflow-auto space-y-1">
-              {events.slice(-16).map((ev, i) => (
-                <div key={i} className="font-mono">
-                  <span className="text-gray-500">[{i}]</span> {ev.type} — {ev.msg}
                 </div>
-              ))}
-            </div>
-          </Section>
+              )}
+            </Section>
+
+            <Section
+              title="smallbins"
+              right={
+                <button
+                  onClick={() => setShowAllSmall(v => !v)}
+                  className="h-7 px-2 rounded-md border border-gray-400 bg-gray-100 text-xs"
+                >
+                  {showAllSmall ? 'show non-empty' : 'show all (first 64)'}
+                </button>
+              }
+            >
+              {smallbinIndices.length === 0 ? (
+                <div className="text-xs text-gray-500 italic">(no non-empty smallbins)</div>
+              ) : (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {smallbinIndices.map(i => (
+                    <div key={i}>
+                      <div className="text-xs font-semibold text-gray-700 mb-1">smallbin[{i}]</div>
+                      <BinRow
+                        items={listSmallbin(i, snap)}
+                        snap={snap}
+                        labelTopPredicate={a => a === topAddr}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Section>
+
+            <Section
+              title="largebins"
+              right={
+                <button
+                  onClick={() => setShowAllLarge(v => !v)}
+                  className="h-7 px-2 rounded-md border border-gray-400 bg-gray-100 text-xs"
+                >
+                  {showAllLarge ? 'show non-empty' : 'show all (bucketed)'}
+                </button>
+              }
+            >
+              {largebinIndices.length === 0 ? (
+                <div className="text-xs text-gray-500 italic">(no non-empty largebins)</div>
+              ) : (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {largebinIndices.map(i => (
+                    <div key={i}>
+                      <div className="text-xs font-semibold text-gray-700 mb-1">largebin[{i}]</div>
+                      <BinRow
+                        items={listLargebin(i, snap)}
+                        snap={snap}
+                        labelTopPredicate={a => a === topAddr}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Section>
+
+            <Section title="tcache (size → LIFO stack)">
+              {Object.keys(snap.tcache).length === 0 ? (
+                <div className="text-xs text-gray-500 italic">(tcache empty)</div>
+              ) : (
+                <div className="space-y-4">
+                  {Object.keys(snap.tcache)
+                    .map(k => Number(k))
+                    .sort((a, b) => a - b)
+                    .map(nb => (
+                      <div key={nb}>
+                        <div className="text-xs font-semibold text-gray-700 mb-1">
+                          size {hex(nb)}
+                        </div>
+                        <BinRow
+                          items={snap.tcache[nb]}
+                          snap={snap}
+                          labelTopPredicate={a => a === topAddr}
+                        />
+                      </div>
+                    ))}
+                </div>
+              )}
+            </Section>
+          </div>
+
+          {/* Right column: allocated / recent events */}
+          <div className="space-y-8 lg:col-span-1">
+            <Section title="allocated (stack top = next free)">
+              <div className="flex gap-4 overflow-x-auto py-2">
+                {allocatedCards.length ? (
+                  allocatedCards
+                ) : (
+                  <div className="text-gray-500 text-xs italic">(no allocations yet)</div>
+                )}
+              </div>
+            </Section>
+            <Section title="recent events">
+              <div className="text-xs text-gray-700 max-h-96 overflow-auto space-y-1">
+                {events.slice(-64).map((ev, i) => (
+                  <div key={i} className="font-mono">
+                    <span className="text-gray-500">[{i}]</span> {ev.type} — {ev.msg}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          </div>
         </div>
       )}
     </div>

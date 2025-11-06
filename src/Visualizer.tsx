@@ -215,11 +215,7 @@ export default function Visualizer() {
 
       {/* Memory layout bar under toolbar */}
       {snap && (
-        <MemoryBar
-          snap={snap}
-          selectedPtr={parsePtr(freePtr)}
-          onSelect={p => setFreePtr(hex(p))}
-        />
+        <MemoryBar snap={snap} selectedPtr={parsePtr(freePtr)} onSelect={p => setFreePtr(hex(p))} />
       )}
 
       {/* Below the toolbar we split into two columns: left = chunks, right = recent events/logs */}
@@ -374,7 +370,7 @@ export default function Visualizer() {
 
           {/* Right column: allocated / recent events */}
           <div className="space-y-4 lg:col-span-1">
-            <Section title="allocated (stack top = next free)">
+            <Section title="allocated">
               <div className="flex gap-4 overflow-x-auto py-2">
                 {allocatedCards.length ? (
                   allocatedCards

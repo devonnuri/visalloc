@@ -172,19 +172,21 @@ export default function Visualizer() {
     <div className="w-full min-h-screen bg-neutral-50 text-gray-900 p-6 font-mono">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-2">
-        <input
-          placeholder="size"
-          value={size}
-          onChange={e => setSize(e.target.value)}
-          className="h-8 w-28 border border-gray-400 bg-white px-2 text-sm font-mono"
-        />
-        <button
-          onClick={doMalloc}
-          className="h-8 px-3 border border-gray-600 bg-gray-200 text-sm shadow font-mono"
-        >
-          malloc
-        </button>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center">
+          <input
+            placeholder="size"
+            value={size}
+            onChange={e => setSize(e.target.value)}
+            className="h-8 w-28 border border-gray-400 bg-white px-2 text-sm font-mono"
+          />
+          <button
+            onClick={doMalloc}
+            className="h-8 px-3 border border-gray-600 bg-gray-200 text-sm shadow font-mono"
+          >
+            malloc
+          </button>
+        </div>
+        <div className="flex items-center">
           <input
             placeholder="free(ptr) e.g. 0x1010"
             value={freePtr}
@@ -204,9 +206,10 @@ export default function Visualizer() {
         >
           consolidate
         </button>
-        <div className="ml-auto text-xs text-gray-600 flex items-center gap-4">
-          <span>top: {hex(topAddr)}</span>
-          <span>next free: {ptrs.length ? hex(ptrs[ptrs.length - 1]) : '-'}</span>
+        <div className="text-xs text-gray-600 flex items-center gap-4">
+          {events.length > 0
+            ? `${events[events.length - 1].type}: ${events[events.length - 1].msg}`
+            : ''}
         </div>
       </div>
 

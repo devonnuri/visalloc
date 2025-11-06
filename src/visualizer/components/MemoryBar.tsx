@@ -24,7 +24,15 @@ function collectTotalSpan(snap: ArenaSnapshot) {
   return { start, end, bytes: end - start };
 }
 
-export default function MemoryBar({ snap }: { snap: ArenaSnapshot }) {
+export default function MemoryBar({
+  snap,
+  selectedPtr,
+  onSelect,
+}: {
+  snap: ArenaSnapshot;
+  selectedPtr?: number | null;
+  onSelect?: (ptr: number) => void;
+}) {
   const { start, bytes } = useMemo(() => collectTotalSpan(snap), [snap]);
   const items = useMemo(() => orderedChunks(snap), [snap]);
 
@@ -58,22 +66,38 @@ export default function MemoryBar({ snap }: { snap: ArenaSnapshot }) {
           const raw = maskSize(c.size) + CHUNK_OVERHEAD;
           const widthPct = Math.max((raw / bytes) * 100, 0.2);
           const isTop = (snap.top ?? -1) === addr;
+          const ptr = ((addr + CHUNK_OVERHEAD) >>> 0) as number;
+          const isSelected = selectedPtr != null && ptr === selectedPtr;
           const cls =
             'h-full shrink-0 border-r ' +
             (isTop
-              ? ' bg-amber-200 border-amber-600'
+              ? isSelected
+                ? ' bg-amber-300 border-amber-700 ring-2 ring-inset ring-black/20'
+                : ' bg-amber-200 border-amber-600'
               : c.inuse
-                ? ' bg-emerald-300 border-emerald-600'
-                : ' bg-sky-200 border-sky-500');
+                ? isSelected
+                  ? ' bg-emerald-500 border-emerald-700 ring-2 ring-inset ring-black/20'
+                  : ' bg-emerald-300 border-emerald-600'
+                : isSelected
+                  ? ' bg-sky-400 border-sky-700 ring-2 ring-inset ring-black/20'
+                  : ' bg-sky-200 border-sky-500');
 
           const tooltip =
             `chunk ${hex(addr)}\n` +
-            `ptr   ${hex((addr + CHUNK_OVERHEAD) >>> 0)}\n` +
+            `ptr   ${hex(ptr)}\n` +
             `size  ${hex(maskSize(c.size))} (+hdr ${CHUNK_OVERHEAD})\n` +
             `state ${isTop ? 'TOP' : c.inuse ? 'INUSE' : 'FREE'}`;
 
+          const clickable = typeof onSelect === 'function';
+          const finalCls = cls + (clickable ? ' cursor-pointer' : '');
           return (
-            <div key={addr} className={cls} style={{ width: `${widthPct}%` }} title={tooltip} />
+            <div
+              key={addr}
+              className={finalCls}
+              style={{ width: `${widthPct}%` }}
+              title={tooltip}
+              onClick={() => clickable && onSelect!(ptr)}
+            />
           );
         })}
       </div>

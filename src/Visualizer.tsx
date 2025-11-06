@@ -214,7 +214,13 @@ export default function Visualizer() {
       </div>
 
       {/* Memory layout bar under toolbar */}
-      {snap && <MemoryBar snap={snap} />}
+      {snap && (
+        <MemoryBar
+          snap={snap}
+          selectedPtr={parsePtr(freePtr)}
+          onSelect={p => setFreePtr(hex(p))}
+        />
+      )}
 
       {/* Below the toolbar we split into two columns: left = chunks, right = recent events/logs */}
       {snap && (

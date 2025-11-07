@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import type { ArenaSnapshot } from './ptmalloc2';
-import { Arena as ArenaImpl } from './ptmalloc2';
+import { Arena as ArenaImpl, CHUNK_OVERHEAD } from './ptmalloc2';
 
 import ChunkCard from './visualizer/components/ChunkCard';
 import BinRow from './visualizer/components/BinRow';
@@ -74,6 +74,9 @@ export default function Visualizer() {
       setFreePtr(hex(ptrs[ptrs.length - 1]));
     }
   }, [ptrs, freePtr]);
+
+  // parsed numeric selected pointer (null if invalid)
+  const selectedPtr = parsePtr(freePtr);
 
   const topAddr = snap?.top ?? null;
   const topChunk = React.useMemo(
@@ -155,18 +158,20 @@ export default function Visualizer() {
       if (!ch)
         return <div key={p} className="text-xs text-gray-500">{`ptr ${hex(p)} (not found)`}</div>;
       const cSnap = snap.chunks[ch.addr];
+      const cardPtr = (ch.addr + CHUNK_OVERHEAD) >>> 0;
       return (
         <div key={p} className="shrink-0">
           <ChunkCard
             caddr={ch.addr}
             c={cSnap}
             isTop={ch.addr === topAddr}
+            selected={selectedPtr != null && selectedPtr === cardPtr}
             onSelect={ptr => setFreePtr(hex(ptr))}
           />
         </div>
       );
     });
-  }, [ptrs, snap, topAddr]);
+  }, [ptrs, snap, topAddr, selectedPtr]);
 
   return (
     <div className="w-full min-h-screen bg-neutral-50 text-gray-900 p-6 font-mono">
@@ -215,7 +220,7 @@ export default function Visualizer() {
 
       {/* Memory layout bar under toolbar */}
       {snap && (
-        <MemoryBar snap={snap} selectedPtr={parsePtr(freePtr)} onSelect={p => setFreePtr(hex(p))} />
+        <MemoryBar snap={snap} selectedPtr={selectedPtr} onSelect={p => setFreePtr(hex(p))} />
       )}
 
       {/* Below the toolbar we split into two columns: left = chunks, right = recent events/logs */}
@@ -229,6 +234,7 @@ export default function Visualizer() {
                 snap={snap}
                 labelTopPredicate={a => a === topAddr}
                 onSelect={p => setFreePtr(hex(p))}
+                selectedPtr={selectedPtr}
               />
             </Section>
 
@@ -248,6 +254,7 @@ export default function Visualizer() {
                         snap={snap}
                         labelTopPredicate={a => a === topAddr}
                         onSelect={p => setFreePtr(hex(p))}
+                        selectedPtr={selectedPtr}
                       />
                     </div>
                   ))}
@@ -278,6 +285,7 @@ export default function Visualizer() {
                         snap={snap}
                         labelTopPredicate={a => a === topAddr}
                         onSelect={p => setFreePtr(hex(p))}
+                        selectedPtr={selectedPtr}
                       />
                     </div>
                   ))}
@@ -308,6 +316,7 @@ export default function Visualizer() {
                         snap={snap}
                         labelTopPredicate={a => a === topAddr}
                         onSelect={p => setFreePtr(hex(p))}
+                        selectedPtr={selectedPtr}
                       />
                     </div>
                   ))}
@@ -333,6 +342,7 @@ export default function Visualizer() {
                           snap={snap}
                           labelTopPredicate={a => a === topAddr}
                           onSelect={p => setFreePtr(hex(p))}
+                          selectedPtr={selectedPtr}
                         />
                       </div>
                     ))}
@@ -350,6 +360,10 @@ export default function Visualizer() {
                     caddr={topAddr as number}
                     c={topChunk}
                     isTop
+                    selected={
+                      selectedPtr != null &&
+                      selectedPtr === ((topAddr as number) + CHUNK_OVERHEAD) >>> 0
+                    }
                     onSelect={p => setFreePtr(hex(p))}
                   />
                 </div>

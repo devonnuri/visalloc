@@ -223,6 +223,7 @@ export class Arena {
   }
 
   // ------------------------------ Memory helpers ------------------------------
+  // @ts-ignore
   private chunkAt(addr: Addr): Chunk | undefined {
     return this.mem.get(addr);
   }
@@ -278,6 +279,7 @@ export class Arena {
   }
 
   // ------------------------------ Bin ops ------------------------------
+  // @ts-ignore
   private unlinkSmallOrUnsorted(addr: Addr) {
     const c = this.mem.get(addr)!;
     const fd = c.fd!;
@@ -369,6 +371,7 @@ export class Arena {
     });
   }
 
+  // @ts-ignore
   private takeFromSmallbin(idx: number, nb: number): Chunk | null {
     const headAddr = this.smallbins[idx];
     if (headAddr == null) return null;

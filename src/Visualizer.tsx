@@ -220,36 +220,9 @@ export default function Visualizer() {
 
       {/* Below the toolbar we split into two columns: left = chunks, right = recent events/logs */}
       {snap && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Left column: chunk-related sections (span 2 on large screens) */}
           <div className="space-y-4 lg:col-span-2">
-            <Section title="top chunk (wilderness)">
-              {topChunk ? (
-                <div className="flex gap-4 items-start">
-                  <ChunkCard
-                    caddr={topAddr as number}
-                    c={topChunk}
-                    isTop
-                    onSelect={p => setFreePtr(hex(p))}
-                  />
-                  <div className="text-xs text-gray-600 leading-5 max-w-md">
-                    <div>
-                      <span className="font-semibold">Address:</span> {hex(topAddr as number)}
-                    </div>
-                    <div>
-                      <span className="font-semibold">Size:</span> {hex(topChunk.size as number)}
-                    </div>
-                    <div className="mt-1">
-                      The <em>top chunk</em> (a.k.a. wilderness) is not in any bin. Allocations
-                      split from its head; frees that coalesce to the top will merge here.
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-xs text-gray-500 italic">(no top chunk)</div>
-              )}
-            </Section>
-
             <Section title="unsorted bin">
               <BinRow
                 items={unsortedItems}
@@ -370,6 +343,21 @@ export default function Visualizer() {
 
           {/* Right column: allocated / recent events */}
           <div className="space-y-4 lg:col-span-1">
+            <Section title="top chunk (wilderness)">
+              {topChunk ? (
+                <div className="flex gap-4 items-start">
+                  <ChunkCard
+                    caddr={topAddr as number}
+                    c={topChunk}
+                    isTop
+                    onSelect={p => setFreePtr(hex(p))}
+                  />
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 italic">(no top chunk)</div>
+              )}
+            </Section>
+
             <Section title="allocated">
               <div className="flex gap-4 overflow-x-auto py-2">
                 {allocatedCards.length ? (

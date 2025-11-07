@@ -64,8 +64,8 @@ export default function ChunkCard({
           </div>
           <div className="flex-1 flex items-center justify-end gap-1 ml-4">
             <FlagCell label="A" active={!!c.inuse} />
+            <FlagCell label="M" active={false} />
             <FlagCell label="P" active={!!c.prev_inuse} />
-            <FlagCell label="T" active={isTop} />
           </div>
         </div>
 
